@@ -6,6 +6,8 @@ import csv
 import re
 from dotenv import load_dotenv
 from pathlib import Path
+from enum import Enum, auto
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -15,6 +17,280 @@ from googleapiclient.errors import HttpError
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Define expense categories
+class ExpenseCategory(Enum):
+    HEALTH = "Health"
+    TRAVEL = "Travel"
+    SUBSCRIPTIONS = "Subscriptions"
+    FOOD_DRINK = "Food & Drink"
+    DONATIONS = "Donations"
+    GROCERIES = "Groceries"
+    SHOPPING = "Shopping"
+    BOOKS = "Books"
+    ENTERTAINMENT = "Entertainment"
+    INVESTING = "Investing"
+    PETER = "Peter"
+    DEBT = "Debt"
+    HOUSEHOLD = "Household"
+    GIFTS = "Gifts"
+    MISC = "Misc"
+    INTEREST = "Interest"
+    SAVING = "Saving"
+    OV = "OV"
+    PERSONAL_DEVELOPMENT = "Personal Development"
+    SPORT = "Sport"
+    INCOME = "Income"  # Added category for income
+    
+    @classmethod
+    def from_string(cls, category_str: str) -> Optional['ExpenseCategory']:
+        """Get enum value from string, case-insensitive"""
+        for category in cls:
+            if category.value.lower() == category_str.lower():
+                return category
+        return None
+    
+    @classmethod
+    def get_all_categories(cls) -> List[str]:
+        """Return list of all category names"""
+        return [category.value for category in cls]
+
+# Dictionary for category classification rules based on transaction descriptions
+CATEGORY_RULES = {
+    # Groceries
+    "albert heijn": ExpenseCategory.GROCERIES,
+    "ah": ExpenseCategory.GROCERIES,
+    "jumbo": ExpenseCategory.GROCERIES,
+    "lidl": ExpenseCategory.GROCERIES,
+    "aldi": ExpenseCategory.GROCERIES,
+    "supermarket": ExpenseCategory.GROCERIES,
+    "tesco": ExpenseCategory.GROCERIES,
+    "mercadona": ExpenseCategory.GROCERIES,
+    "expsjoan98": ExpenseCategory.GROCERIES,
+    "market roger de flor": ExpenseCategory.GROCERIES,
+    "624 - ea aer": ExpenseCategory.GROCERIES,
+    "paseo sant joan": ExpenseCategory.GROCERIES,
+    "a taste of home": ExpenseCategory.GROCERIES,
+    
+    # Food & Drink
+    "restaurant": ExpenseCategory.FOOD_DRINK,
+    "cafe": ExpenseCategory.FOOD_DRINK,
+    "bar": ExpenseCategory.FOOD_DRINK,
+    "mcdonalds": ExpenseCategory.FOOD_DRINK,
+    "starbucks": ExpenseCategory.FOOD_DRINK,
+    "coffee": ExpenseCategory.FOOD_DRINK,
+    "pret a manger": ExpenseCategory.FOOD_DRINK,
+    "costa coffee": ExpenseCategory.FOOD_DRINK,
+    "tio bigotes": ExpenseCategory.FOOD_DRINK,
+    "honest greens": ExpenseCategory.FOOD_DRINK,
+    "glovo": ExpenseCategory.FOOD_DRINK,
+    "uber * eats": ExpenseCategory.FOOD_DRINK,
+    "lounge": ExpenseCategory.FOOD_DRINK,
+    "tandoori": ExpenseCategory.FOOD_DRINK,
+    "gau lounge": ExpenseCategory.FOOD_DRINK,
+    "bokaal": ExpenseCategory.FOOD_DRINK,
+    "harvest coffee": ExpenseCategory.FOOD_DRINK,
+    "het kroket": ExpenseCategory.FOOD_DRINK,
+    "yellowriverlanz": ExpenseCategory.FOOD_DRINK,
+    "fenix food": ExpenseCategory.FOOD_DRINK,
+    "bar kauffmann": ExpenseCategory.FOOD_DRINK,
+    "five ways coffee": ExpenseCategory.FOOD_DRINK,
+    "artisanal cuis": ExpenseCategory.FOOD_DRINK,
+    "zuylen": ExpenseCategory.FOOD_DRINK,
+    "nypdamsterdamarena": ExpenseCategory.FOOD_DRINK,
+    "boulevard bv": ExpenseCategory.FOOD_DRINK,
+    
+    # Travel
+    "ns ": ExpenseCategory.TRAVEL,
+    "ns reizigers": ExpenseCategory.TRAVEL,
+    "train": ExpenseCategory.TRAVEL,
+    "flight": ExpenseCategory.TRAVEL,
+    "airline": ExpenseCategory.TRAVEL,
+    "hotel": ExpenseCategory.TRAVEL,
+    "airbnb": ExpenseCategory.TRAVEL,
+    "national express": ExpenseCategory.TRAVEL,
+    "renfe": ExpenseCategory.TRAVEL,
+    "metro barcelona": ExpenseCategory.TRAVEL,
+    "uber * pending": ExpenseCategory.TRAVEL,
+    "monbus": ExpenseCategory.TRAVEL,
+    "e521": ExpenseCategory.TRAVEL, # NS e-Tickets
+    "ov-chipkaart": ExpenseCategory.TRAVEL,
+    
+    # Subscriptions
+    "netflix": ExpenseCategory.SUBSCRIPTIONS,
+    "spotify": ExpenseCategory.SUBSCRIPTIONS,
+    "duo": ExpenseCategory.SUBSCRIPTIONS, # Student loan
+    "google one": ExpenseCategory.SUBSCRIPTIONS,
+    "amazon prime": ExpenseCategory.SUBSCRIPTIONS,
+    "obsidian.md": ExpenseCategory.SUBSCRIPTIONS,
+    "odido": ExpenseCategory.SUBSCRIPTIONS,
+    "monthly acc. costs": ExpenseCategory.SUBSCRIPTIONS,
+    "zilveren kruis": ExpenseCategory.SUBSCRIPTIONS, # Health insurance
+    "google*google play": ExpenseCategory.SUBSCRIPTIONS,
+    "altafit": ExpenseCategory.SUBSCRIPTIONS, # Gym subscription
+    
+    # Household
+    "rent": ExpenseCategory.HOUSEHOLD,
+    "bills": ExpenseCategory.HOUSEHOLD,
+    "insurance": ExpenseCategory.HOUSEHOLD,
+    "utilities": ExpenseCategory.HOUSEHOLD,
+    "electricity": ExpenseCategory.HOUSEHOLD,
+    "water": ExpenseCategory.HOUSEHOLD,
+    "gas": ExpenseCategory.HOUSEHOLD,
+    "wight": ExpenseCategory.HOUSEHOLD, # Landlord
+    
+    # Entertainment
+    "ziggo dome": ExpenseCategory.ENTERTAINMENT,
+    "funk fest": ExpenseCategory.ENTERTAINMENT,
+    "wildlife par": ExpenseCategory.ENTERTAINMENT,
+    "limp biz": ExpenseCategory.ENTERTAINMENT,
+    "meaker": ExpenseCategory.ENTERTAINMENT,
+    "ticketmaster": ExpenseCategory.ENTERTAINMENT,
+    "pierre via tikkie": ExpenseCategory.ENTERTAINMENT, # Concert ticket
+    
+    # Shopping
+    "uniqlo": ExpenseCategory.SHOPPING,
+    "amazon": ExpenseCategory.SHOPPING,
+    "towel": ExpenseCategory.SHOPPING,
+    
+    # Health
+    "doctor": ExpenseCategory.HEALTH,
+    "hospital": ExpenseCategory.HEALTH,
+    "pharmacy": ExpenseCategory.HEALTH,
+    "medical": ExpenseCategory.HEALTH,
+    "zilveren kruis": ExpenseCategory.HEALTH,
+    
+    # Donations
+    "donation": ExpenseCategory.DONATIONS,
+    "charity": ExpenseCategory.DONATIONS,
+    "gofundme": ExpenseCategory.DONATIONS,
+    "gfm*gofundme": ExpenseCategory.DONATIONS,
+    
+    # Books
+    "kindle": ExpenseCategory.BOOKS,
+    "book": ExpenseCategory.BOOKS,
+    
+    # Investing
+    "flatexdegiro": ExpenseCategory.INVESTING,
+    "invest": ExpenseCategory.INVESTING,
+    
+    # Sport
+    "playtomic": ExpenseCategory.SPORT,
+    "gym": ExpenseCategory.SPORT,
+    "fitness": ExpenseCategory.SPORT,
+    
+    # Debt
+    "transferwise": ExpenseCategory.DEBT,
+    
+    # Saving
+    "trade republic": ExpenseCategory.SAVING,
+    
+    # Interest
+    "bunq payday": ExpenseCategory.INTEREST,
+    "interest": ExpenseCategory.INTEREST,
+    
+    # Gifts
+    "sagrada familia": ExpenseCategory.GIFTS,
+    "gift": ExpenseCategory.GIFTS,
+    
+    # OV (Public Transport)
+    "ov": ExpenseCategory.OV,
+    "gvb": ExpenseCategory.OV,
+    "ns automaat": ExpenseCategory.OV, # Train station purchases
+    
+    # Misc (for transactions that don't fit other categories)
+    "afecte": ExpenseCategory.MISC,
+    "rihab ibne": ExpenseCategory.MISC,
+    "bhoekhan": ExpenseCategory.MISC,
+    "valencia": ExpenseCategory.MISC,
+    
+    # Income
+    "bynder": ExpenseCategory.INCOME,  # We'll check amount separately
+    "salary": ExpenseCategory.INCOME,
+    "payroll": ExpenseCategory.INCOME,
+    "loon": ExpenseCategory.INCOME,   # Dutch for salary
+    "inkomen": ExpenseCategory.INCOME, # Dutch for income
+    "wage": ExpenseCategory.INCOME,
+}
+
+# Function to improve category matching with more sophisticated logic
+def get_category_for_description(description: str) -> Optional[ExpenseCategory]:
+    """
+    Determine expense category based on transaction description
+    with more sophisticated matching logic
+    
+    Args:
+        description: Transaction description text
+        
+    Returns:
+        Matching ExpenseCategory or None if no match found
+    """
+    if not description:
+        return None
+        
+    # Convert to lowercase for case-insensitive matching
+    desc_lower = description.lower()
+    
+    # Special case handling for common patterns
+    if "albert heijn" in desc_lower or "jumbo" in desc_lower or "aldi" in desc_lower:
+        return ExpenseCategory.GROCERIES
+    
+    if "rent" in desc_lower and ("bills" in desc_lower or "wight" in desc_lower):
+        return ExpenseCategory.HOUSEHOLD
+    
+    if ("zilveren kruis" in desc_lower) and "premie" in desc_lower:
+        return ExpenseCategory.SUBSCRIPTIONS
+        
+    if "duo" in desc_lower and "studieschuld" in desc_lower:
+        return ExpenseCategory.SUBSCRIPTIONS
+    
+    # Check for NS train tickets
+    if "e52" in desc_lower and "ns" in desc_lower and "tickets" in desc_lower:
+        return ExpenseCategory.TRAVEL
+    
+    # Check for food delivery services
+    if "uber" in desc_lower and "eats" in desc_lower:
+        return ExpenseCategory.FOOD_DRINK
+    
+    # Check for keywords in the description
+    for keyword, category in CATEGORY_RULES.items():
+        if keyword in desc_lower:
+            return category
+            
+    return None
+
+# Helper function to extract amount value from string
+def extract_amount_value(amount_str: str) -> float:
+    """
+    Extract numerical value from amount string, handling various formats
+    
+    Args:
+        amount_str: String representation of amount (e.g., '€3,000.00', '-€24,06')
+        
+    Returns:
+        Float value of the amount
+    """
+    if not amount_str or not isinstance(amount_str, str):
+        return 0.0
+    
+    # Remove currency symbols and spaces
+    cleaned = amount_str.replace('€', '').replace('$', '').replace(' ', '')
+    
+    try:
+        # Handle European format (comma as decimal separator)
+        if ',' in cleaned and '.' in cleaned:
+            # Format with both comma and dot - assume comma is thousands separator
+            cleaned = cleaned.replace(',', '')
+            return float(cleaned)
+        elif ',' in cleaned:
+            # Comma as decimal separator
+            return float(cleaned.replace(',', '.'))
+        else:
+            # Standard format or just a dot as decimal separator
+            return float(cleaned)
+    except ValueError:
+        print(f"Could not parse amount: '{amount_str}'")
+        return 0.0
 
 # Function to load account IBANs from environment variables
 def load_account_ibans():
@@ -291,84 +567,161 @@ def parse_csv_file(csv_file_path, delimiter=None, add_category_column=False):
                     delimiter = ','
                     print(f"Could not detect delimiter, using comma (,) as default")
         
+        # Expand path if needed (for ~ home directory)
+        expanded_path = os.path.expanduser(csv_file_path)
+        
         # Parse the CSV file with the determined delimiter
-        with open(csv_file_path, 'r', newline='', encoding='utf-8') as csvfile:
+        with open(expanded_path, 'r', newline='', encoding='utf-8') as csvfile:
             csv_reader = csv.reader(csvfile, delimiter=delimiter)
             has_rows = False
             
-            # Process the header first to check for Category column and find Account column index
+            # Process the header first to check for Category column and find column indices
             header_row = next(csv_reader, None)
             has_rows = header_row is not None
             
             if has_rows:
-                # Find the Account column index if it exists
+                print(f"CSV Headers: {header_row}")
+                
+                # Find various column indices
                 account_column_index = -1
                 amount_column_index = -1
+                description_column_index = -1
+                category_column_index = -1
+                counterparty_column_index = -1  # For counterparty name
                 
                 for i, header in enumerate(header_row):
-                    header_lower = header.lower()
+                    header_lower = header.lower() if header else ""
+                    
                     if header_lower == 'account':
                         account_column_index = i
                         print(f"Found Account column at index {i}")
-                    elif header_lower == 'amount':
+                    elif header_lower in ('amount', 'bedrag'):  # 'bedrag' is Dutch for 'amount'
                         amount_column_index = i
                         print(f"Found Amount column at index {i}")
+                    elif header_lower in ('description', 'desc', 'details', 'transaction', 'omschrijving'):
+                        description_column_index = i
+                        print(f"Found Description column at index {i}")
+                    elif header_lower == 'category':
+                        category_column_index = i
+                        print(f"Found existing Category column at index {i}")
+                    elif header_lower in ('counterparty', 'tegenrekening', 'naam', 'name', 'counterparty name'):
+                        counterparty_column_index = i
+                        print(f"Found Counterparty column at index {i}")
                 
                 # Check if Category column exists in the header
-                has_category = 'Category' in header_row
+                has_category = category_column_index >= 0
                 
-                # Add the header to our data
+                # Add the Category column to the header if needed and requested
                 if add_category_column and not has_category:
                     header_row.append('Category')
+                    category_column_index = len(header_row) - 1
+                    print(f"Added Category column at index {category_column_index}")
+                    
                 data.append(header_row)
+                
+                # Set a counter for how many rows were categorized
+                categorized_rows = 0
+                total_rows = 0
                 
                 # Process remaining rows
                 for row in csv_reader:
-                    if row:  # Skip empty rows
-                        # Replace IBAN with account name if the Account column is found
-                        if account_column_index >= 0 and account_column_index < len(row):
-                            iban = row[account_column_index].strip()
-                            # Find matching account name for this IBAN
-                            account_name = None
-                            for name, account_iban in ACCOUNT_IBANS.items():
-                                if account_iban == iban:
-                                    account_name = name
-                                    break
-                            
-                            # Replace IBAN with account name if found
-                            if account_name:
-                                row[account_column_index] = account_name
-                                print(f"Replaced IBAN {iban} with account name: {account_name}")
+                    if not row:  # Skip empty rows
+                        continue
                         
-                        # Format the Amount column to use European number format
-                        if amount_column_index >= 0 and amount_column_index < len(row):
-                            amount_str = row[amount_column_index].strip()
-                            if amount_str:
-                                try:
-                                    # Use our formatting function
-                                    original = amount_str
-                                    formatted = format_european_number(amount_str)
-                                    row[amount_column_index] = formatted
-                                    
-                                    if original != formatted:
-                                        print(f"Reformatted amount: '{original}' -> '{formatted}'")
-                                except Exception as e:
-                                    print(f"Error formatting amount '{amount_str}': {str(e)}")
-                            
-                        # Add empty category column if needed
-                        if add_category_column and not has_category:
+                    total_rows += 1
+                    
+                    # Replace IBAN with account name if the Account column is found
+                    if account_column_index >= 0 and account_column_index < len(row):
+                        iban = row[account_column_index].strip()
+                        # Find matching account name for this IBAN
+                        account_name = None
+                        for name, account_iban in ACCOUNT_IBANS.items():
+                            if account_iban == iban:
+                                account_name = name
+                                break
+                        
+                        # Replace IBAN with account name if found
+                        if account_name:
+                            row[account_column_index] = account_name
+                            print(f"Replaced IBAN {iban} with account name: {account_name}")
+                    
+                    # Format the Amount column to use European number format
+                    if amount_column_index >= 0 and amount_column_index < len(row):
+                        amount_str = row[amount_column_index].strip()
+                        if amount_str:
+                            try:
+                                # Use our formatting function
+                                original = amount_str
+                                formatted = format_european_number(amount_str)
+                                row[amount_column_index] = formatted
+                                
+                                if original != formatted:
+                                    print(f"Reformatted amount: '{original}' -> '{formatted}'")
+                            except Exception as e:
+                                print(f"Error formatting amount '{amount_str}': {str(e)}")
+                    
+                    # Handle categorization
+                    if category_column_index >= 0:
+                        # Ensure we have enough columns for the category
+                        while len(row) <= category_column_index:
                             row.append('')
-                        data.append(row)
+                            
+                        # Only suggest category if the field is currently empty or we're explicitly asked to categorize
+                        if not row[category_column_index].strip() or add_category_column:
+                            # Collect all text that might help determine the category
+                            category_text = ""
+                            
+                            # Add description if available
+                            if description_column_index >= 0 and description_column_index < len(row):
+                                category_text += " " + row[description_column_index]
+                                
+                            # Add counterparty if available
+                            if counterparty_column_index >= 0 and counterparty_column_index < len(row):
+                                category_text += " " + row[counterparty_column_index]
+                            
+                            # Get amount if available for special categorization rules
+                            amount_value = 0.0
+                            if amount_column_index >= 0 and amount_column_index < len(row):
+                                amount_str = row[amount_column_index].strip()
+                                amount_value = extract_amount_value(amount_str)
+                            
+                            # Special case for income from Bynder
+                            if "bynder" in category_text.lower() and amount_value >= 3000:
+                                row[category_column_index] = ExpenseCategory.INCOME.value
+                                categorized_rows += 1
+                                print(f"Auto-categorized as 'Income' based on Bynder payment of {amount_value} euros")
+                                continue  # Skip further categorization attempts
+                                
+                            # If we have some text to work with, try to determine category
+                            if category_text.strip():
+                                category = get_category_for_description(category_text.strip())
+                                if category:
+                                    row[category_column_index] = category.value
+                                    categorized_rows += 1
+                                    print(f"Auto-categorized as '{category.value}' based on text: '{category_text.strip()}'")
+                    
+                    # Add empty category column if needed
+                    elif add_category_column:
+                        row.append('')
+                        
+                    data.append(row)
+                
+                # Show categorization summary
+                if add_category_column and total_rows > 0:
+                    success_rate = (categorized_rows / total_rows) * 100
+                    print(f"Categorization complete: {categorized_rows} out of {total_rows} rows categorized ({success_rate:.1f}%)")
             else:
                 print(f"Warning: File {csv_file_path} is empty")
         
         # If we only have one column per row, we might have the wrong delimiter
-        if data and all(len(row) == 1 for row in data):
+        if data and len(data) > 1 and all(len(row) == 1 for row in data):
             print(f"Warning: All rows have only one column. The delimiter might be incorrect.")
             
         return data
     except Exception as e:
         print(f"Error parsing CSV file {csv_file_path}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def upload_csv_to_sheet(csv_file_path, spreadsheet_id=SAMPLE_SPREADSHEET_ID, range_name=SAMPLE_RANGE_NAME, creds=None, delimiter=None, add_category_column=False):
@@ -426,6 +779,16 @@ def main():
         action="store_true",
         help="Add a Category column to the data if not present"
     )
+    parser.add_argument(
+        "--auto-categorize",
+        action="store_true",
+        help="Automatically assign categories based on transaction descriptions"
+    )
+    parser.add_argument(
+        "--force-categorize",
+        action="store_true",
+        help="Force recategorization even if Category column has values"
+    )
     args = parser.parse_args()
     
     # Process delimiter
@@ -436,15 +799,19 @@ def main():
         else:
             delimiter = args.delimiter
     
+    # Determine if we should add and auto-fill categories
+    add_category = args.add_category or args.auto_categorize or args.force_categorize
+    
     if args.file_path:
         # If a single file is specified, upload it directly
-        if not os.path.exists(args.file_path):
-            print(f"Error: File {args.file_path} not found.")
+        expanded_path = os.path.expanduser(args.file_path)
+        if not os.path.exists(expanded_path):
+            print(f"Error: File {expanded_path} not found.")
             return 1
             
-        print(f"Uploading CSV file: {args.file_path}")
-        response = upload_csv_to_sheet(args.file_path, creds=creds, delimiter=delimiter, 
-                                       add_category_column=args.add_category)
+        print(f"Uploading CSV file: {expanded_path}")
+        response = upload_csv_to_sheet(expanded_path, creds=creds, delimiter=delimiter, 
+                                       add_category_column=add_category)
         if response:
             print("CSV file uploaded successfully.")
             return 0
@@ -454,8 +821,9 @@ def main():
             
     elif args.directory_path:
         # Directory processing code
-        print(f"Combining CSV files from directory: {args.directory_path}")
-        combined_file = combine_csv_files(args.directory_path)
+        expanded_dir = os.path.expanduser(args.directory_path)
+        print(f"Combining CSV files from directory: {expanded_dir}")
+        combined_file = combine_csv_files(expanded_dir)
         if not combined_file:
             print("Failed to combine CSV files.")
             return 1
@@ -465,7 +833,8 @@ def main():
         # Upload the combined file to Google Sheets
         print(f"Uploading combined CSV file to Google Sheets...")
         # Category column is already added in combine_csv_files function
-        response = upload_csv_to_sheet(combined_file, creds=creds, delimiter=delimiter)
+        response = upload_csv_to_sheet(combined_file, creds=creds, delimiter=delimiter, 
+                                      add_category_column=add_category)
         if response:
             print("Combined CSV file uploaded successfully.")
             return 0
@@ -473,6 +842,11 @@ def main():
             print("Failed to upload combined CSV file.")
             return 1
     else:
+        # Print list of available categories
+        print("Available expense categories:")
+        for category in ExpenseCategory.get_all_categories():
+            print(f"  - {category}")
+        
         parser.print_help()
         return 1
     
