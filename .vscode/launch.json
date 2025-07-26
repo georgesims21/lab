@@ -1,0 +1,41 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: import-statements.py file",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/bank-statement-importer/import-statements.py",
+            "args": [
+                "-f",
+                "~/Documents/statements/Feb '25_test/combined.csv"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}/scripts/bank-statement-importer/",
+            "python": "${workspaceFolder}/scripts/bank-statement-importer/venv/bin/python"
+        },
+        {
+            "name": "Python: import-statements.py directory",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/bank-statement-importer/import-statements.py",
+            "args": [
+                "-d",
+                "~/Documents/statements/Feb '25_test"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}/scripts/bank-statement-importer/",
+            "python": "${workspaceFolder}/scripts/bank-statement-importer/venv/bin/python"
+        },
+    ]
+}

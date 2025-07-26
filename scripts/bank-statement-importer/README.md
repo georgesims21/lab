@@ -1,103 +1,108 @@
 # Bank Statement Importer
 
-A Python utility for combining multiple CSV bank statement files and optionally uploading them to Google Sheets.
+A utility for combining multiple CSV bank statement files and uploading them to Google Sheets.
 
-## Overview
+## Features
 
-This tool helps you process multiple CSV bank statement files by:
-1. Combining them into a single consolidated CSV file (preserving headers)
-2. Optionally uploading the combined data to a Google Sheets spreadsheet
+- Combine multiple CSV files into one, preserving headers from a specified file
+- Upload CSV data to a Google Sheet, appending to existing content
+- Flexible operation modes: concatenate only, upload only, or both
 
-## Requirements
+## Prerequisites
 
 - Python 3.6+
-- Required Python packages:
+- Required packages:
   - pandas
   - google-api-python-client
   - google-auth-oauthlib
   - google-auth
 
-Install the required packages using the provided requirements.txt file:
+## Setup
 
+### Using Virtual Environment (recommended)
+
+1. Create a virtual environment:
 ```bash
-pip install -r requirements.txt
+python -m venv venv
 ```
 
-## Configuration
+2. Activate the virtual environment:
+```bash
+# On Windows
+venv\Scripts\activate
 
-### Google Sheets API Setup
+# On macOS/Linux
+source venv/bin/activate
+```
 
-To use the Google Sheets upload functionality, you need to:
+3. Install the required packages:
+```bash
+pip install pandas google-api-python-client google-auth-oauthlib google-auth
+```
 
-1. Create a project in the [Google Cloud Console](https://console.cloud.google.com/)
+### Direct Installation
+
+If not using a virtual environment, install the required packages using pip:
+```bash
+pip install pandas google-api-python-client google-auth-oauthlib google-auth
+```
+
+## Google Sheets API Setup
+
+1. Create a Google Cloud project
 2. Enable the Google Sheets API
-3. Create OAuth 2.0 credentials
-4. Download the credentials JSON file
-5. Save the credentials file as `credentials.json` in the same directory as the script
+3. Create OAuth 2.0 credentials and download as `credentials.json`
+4. Place `credentials.json` in the same directory as the script
 
 ## Usage
 
-### Basic Usage
-
-Combine all CSV files in a directory:
-
 ```bash
-python import-statements.py /path/to/csv/files
+python import-statements.py [DIRECTORY] [OPTIONS]
 ```
 
-### Specify Output File
+### Basic Arguments
+
+- `DIRECTORY`: Path to the directory containing CSV files to process
+
+### Operation Modes
+
+- `-u, --upload`: Concatenate files and upload the result to Google Sheets (default combined behavior)
+- `--concat-only`: Only concatenate CSV files without uploading
+- `--upload-only`: Only upload a specific file without concatenation
+
+### Output Options
+
+- `-o, --output`: Output filename for the combined CSV (default: 'combined.csv')
+- `-f, --header-file`: Specific CSV file to use for the header row (default: first CSV file found)
+
+### Upload Options
+
+- `-s, --spreadsheet-id`: Google Spreadsheet ID to upload data to
+- `-t, --sheet-name`: Tab/Sheet name in the spreadsheet
+- `-i, --input-file`: Specific CSV file to upload (required when using --upload-only)
+
+## Examples
+
+### Combine CSV files only
 
 ```bash
-python import-statements.py /path/to/csv/files -o output.csv
+python import-statements.py ~/bank_statements --concat-only -o combined_statements.csv
 ```
 
-### Use a Specific File for Headers
+### Upload an existing CSV file to Google Sheets
 
 ```bash
-python import-statements.py /path/to/csv/files -f specific_header_file.csv
+python import-statements.py . --upload-only -i path/to/file.csv -s your_spreadsheet_id -t SheetName
 ```
 
-### Upload to Google Sheets
+### Combine CSV files and upload to Google Sheets (traditional usage)
 
 ```bash
-python import-statements.py /path/to/csv/files -u -s SPREADSHEET_ID -t "Sheet Name"
+python import-statements.py ~/bank_statements -u -s your_spreadsheet_id -t SheetName
 ```
 
-## Command-line Arguments
+## Notes
 
-- `directory`: Directory containing CSV files (required)
-- `-o, --output`: Output file name (default: 'combined.csv')
-- `-f, --header-file`: Specific file to use for the header (default: first CSV file found)
-- `-u, --upload`: Flag to upload the combined CSV to Google Sheets
-- `-s, --spreadsheet-id`: Google Spreadsheet ID for uploading (required with -u)
-- `-t, --sheet-name`: Tab/Sheet name in the spreadsheet (required with -u)
-
-## How It Works
-
-1. **CSV Combination Process**:
-   - The script scans the specified directory for CSV files
-   - By default, it takes the header from the first CSV file found (alphabetically)
-   - Alternatively, you can specify a specific file to use for the header
-   - It combines all data rows (excluding headers) from all CSV files into a single output file
-   - The resulting file is saved in the same directory as the input files
-   
-2. **Google Sheets Upload** (if enabled):
-   - Authenticates with Google using OAuth 2.0
-   - Finds the specified sheet within the spreadsheet
-   - Clears any existing data in the target sheet
-   - Uploads the combined CSV data to the specified Google Sheet
-   - Updates the sheet with proper formatting
-
-## Authentication Notes
-
-- The first time you run the upload function, it will open a browser window prompting you to authorize the application
-- Authentication tokens are stored in `token.json` in the script directory
-- Subsequent runs will use the stored token without requiring re-authorization unless the token expires
-
-## Error Handling
-
-The script includes error handling for common issues:
-- Missing CSV files in the specified directory
-- Invalid header file specification
-- Google Sheets API authentication failures
-- Missing spreadsheet or sheet name
+- When uploading to Google Sheets, data is appended to any existing content in the sheet
+- The first time you run the script with upload functionality, it will open a browser window for authentication
+- Authentication tokens are saved in `token.json` for future use
