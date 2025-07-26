@@ -224,6 +224,39 @@ def combine_csv_files(directory_path, output_file='combined.csv', header_file=No
         # Return to the original directory
         os.chdir(original_dir)
 
+def format_european_number(amount_str):
+    """
+    Format a number string from English format to European format
+    - Changes decimal point from '.' to ','
+    - Changes thousand separator from ',' to '.'
+    
+    Examples:
+        "123.45" -> "123,45"
+        "1,234.56" -> "1.234,56"
+    """
+    if not amount_str or not isinstance(amount_str, str):
+        return amount_str
+        
+    amount_str = amount_str.strip()
+    
+    # Handle simple case first (no thousand separators)
+    if '.' in amount_str and ',' not in amount_str:
+        return amount_str.replace('.', ',')
+        
+    # Handle numbers with thousand separators
+    if ',' in amount_str:
+        # First, replace commas with temporary placeholder
+        temp_str = amount_str.replace(',', '|')
+        # Then replace decimal point with comma
+        if '.' in temp_str:
+            temp_str = temp_str.replace('.', ',')
+        # Finally replace the placeholder with dots
+        final_str = temp_str.replace('|', '.')
+        return final_str
+    
+    # Return original if no formatting needed
+    return amount_str
+
 def parse_csv_file(csv_file_path, delimiter=None, add_category_column=False):
     """
     Parses a CSV file into a 2D array suitable for Google Sheets.
@@ -270,11 +303,16 @@ def parse_csv_file(csv_file_path, delimiter=None, add_category_column=False):
             if has_rows:
                 # Find the Account column index if it exists
                 account_column_index = -1
+                amount_column_index = -1
+                
                 for i, header in enumerate(header_row):
-                    if header.lower() == 'account':
+                    header_lower = header.lower()
+                    if header_lower == 'account':
                         account_column_index = i
                         print(f"Found Account column at index {i}")
-                        break
+                    elif header_lower == 'amount':
+                        amount_column_index = i
+                        print(f"Found Amount column at index {i}")
                 
                 # Check if Category column exists in the header
                 has_category = 'Category' in header_row
@@ -301,6 +339,21 @@ def parse_csv_file(csv_file_path, delimiter=None, add_category_column=False):
                             if account_name:
                                 row[account_column_index] = account_name
                                 print(f"Replaced IBAN {iban} with account name: {account_name}")
+                        
+                        # Format the Amount column to use European number format
+                        if amount_column_index >= 0 and amount_column_index < len(row):
+                            amount_str = row[amount_column_index].strip()
+                            if amount_str:
+                                try:
+                                    # Use our formatting function
+                                    original = amount_str
+                                    formatted = format_european_number(amount_str)
+                                    row[amount_column_index] = formatted
+                                    
+                                    if original != formatted:
+                                        print(f"Reformatted amount: '{original}' -> '{formatted}'")
+                                except Exception as e:
+                                    print(f"Error formatting amount '{amount_str}': {str(e)}")
                             
                         # Add empty category column if needed
                         if add_category_column and not has_category:
